@@ -1,0 +1,13 @@
+{
+  // Tailwind v4의 @theme / @source / @custom-variant / @apply 는 표준 CSS 문법이 아니라
+  // VS Code 기본 CSS 검사기가 "Unknown at rule" 경고를 낸다. 검사기를 Tailwind 쪽으로 넘긴다.
+  "files.associations": {
+    "*.css": "tailwindcss"
+  },
+  "css.lint.unknownAtRules": "ignore",
+  "scss.lint.unknownAtRules": "ignore",
+  "less.lint.unknownAtRules": "ignore",
+  "editor.quickSuggestions": {
+    "strings": "on"
+  }
+}

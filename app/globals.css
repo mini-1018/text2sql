@@ -1,0 +1,208 @@
+@import "tailwindcss";
+
+/* Tailwind v4는 git 저장소 경계로 프로젝트 루트를 추론해 클래스를 스캔한다.
+   이 프로젝트는 git 저장소 밖에 있어 자동 탐색이 동작하지 않으므로 소스를 명시한다.
+   (누락되면 테마/베이스만 생성되고 유틸리티 클래스가 전부 빠진다) */
+@source "../app";
+@source "../components";
+
+/* 다크 모드는 <html data-theme="dark"> 로 전환한다 (layout.tsx의 부트 스크립트 참고) */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ------------------------------------------------------------------
+   원본 토큰 — Notion 계열의 따뜻한 뉴트럴 팔레트
+   ------------------------------------------------------------------ */
+:root {
+  --c-canvas: #ffffff;
+  --c-sidebar: #f7f7f5;
+  --c-inset: #f7f6f3;
+  --c-elevated: #ffffff;
+
+  --c-ink: #37352f;
+  --c-ink-2: rgba(55, 53, 47, 0.65);
+  --c-ink-3: rgba(55, 53, 47, 0.45);
+
+  --c-line: rgba(55, 53, 47, 0.09);
+  --c-line-2: rgba(55, 53, 47, 0.16);
+  --c-hover: rgba(55, 53, 47, 0.055);
+  --c-active: rgba(55, 53, 47, 0.09);
+
+  --c-accent: #2383e2;
+  --c-accent-soft: rgba(35, 131, 226, 0.1);
+  --c-danger: #d44c47;
+  --c-danger-soft: rgba(212, 76, 71, 0.07);
+  --c-danger-line: rgba(212, 76, 71, 0.3);
+  --c-ok: #4dab6d;
+
+  --c-code: #c7254e;
+}
+
+[data-theme="dark"] {
+  --c-canvas: #191919;
+  --c-sidebar: #202020;
+  --c-inset: #232323;
+  --c-elevated: #252525;
+
+  --c-ink: #d4d4d4;
+  --c-ink-2: rgba(255, 255, 255, 0.56);
+  --c-ink-3: rgba(255, 255, 255, 0.36);
+
+  --c-line: rgba(255, 255, 255, 0.094);
+  --c-line-2: rgba(255, 255, 255, 0.16);
+  --c-hover: rgba(255, 255, 255, 0.055);
+  --c-active: rgba(255, 255, 255, 0.09);
+
+  --c-accent: #529cca;
+  --c-accent-soft: rgba(82, 156, 202, 0.14);
+  --c-danger: #ff7369;
+  --c-danger-soft: rgba(255, 115, 105, 0.09);
+  --c-danger-line: rgba(255, 115, 105, 0.32);
+  --c-ok: #4dab6d;
+
+  --c-code: #eb5757;
+}
+
+/* ------------------------------------------------------------------
+   Tailwind 테마 — inline 이라 위 CSS 변수를 그대로 참조해 테마 전환이 반영된다
+   ------------------------------------------------------------------ */
+@theme inline {
+  --color-canvas: var(--c-canvas);
+  --color-sidebar: var(--c-sidebar);
+  --color-inset: var(--c-inset);
+  --color-elevated: var(--c-elevated);
+
+  --color-ink: var(--c-ink);
+  --color-ink-2: var(--c-ink-2);
+  --color-ink-3: var(--c-ink-3);
+
+  --color-line: var(--c-line);
+  --color-line-2: var(--c-line-2);
+  --color-hover: var(--c-hover);
+  --color-active: var(--c-active);
+
+  --color-accent: var(--c-accent);
+  --color-accent-soft: var(--c-accent-soft);
+  --color-danger: var(--c-danger);
+  --color-danger-soft: var(--c-danger-soft);
+  --color-danger-line: var(--c-danger-line);
+  --color-ok: var(--c-ok);
+  --color-code: var(--c-code);
+
+  --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", Helvetica, Arial,
+    sans-serif;
+  --font-serif: Lyon-Text, Georgia, ui-serif, serif;
+  --font-mono: "SFMono-Regular", "JetBrains Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+
+  /* 본문 최대 폭 — 스레드·입력창·빈 화면이 같은 폭을 공유한다 */
+  --container-measure: 46rem;
+
+  --shadow-card: 0 1px 2px rgba(15, 15, 15, 0.06),
+    0 2px 4px rgba(15, 15, 15, 0.04);
+  --shadow-pop: 0 4px 12px rgba(15, 15, 15, 0.06),
+    0 16px 48px rgba(15, 15, 15, 0.12);
+
+  --animate-rise: rise 320ms cubic-bezier(0.2, 0, 0, 1) both;
+  --animate-blink: blink 1.3s ease-in-out infinite;
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes blink {
+    0%,
+    70%,
+    100% {
+      opacity: 0.25;
+    }
+    35% {
+      opacity: 1;
+    }
+  }
+}
+
+/* ------------------------------------------------------------------
+   Base
+   ------------------------------------------------------------------ */
+@layer base {
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    background: var(--c-canvas);
+    color: var(--c-ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: rgba(35, 131, 226, 0.2);
+  }
+
+  /* 스크롤바 — Notion 처럼 존재감 없이 */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--c-line-2);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 6px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--c-ink-3);
+    background-clip: content-box;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* ------------------------------------------------------------------
+   유틸리티로 표현하기 번거로운 소수의 규칙만 컴포넌트 레이어로
+   ------------------------------------------------------------------ */
+@layer components {
+  /* 모델 응답 본문 안의 인라인 코드 */
+  .prose-reply code {
+    font-family: var(--font-mono);
+    font-size: 0.86em;
+    background: var(--c-inset);
+    border: 1px solid var(--c-line);
+    border-radius: 4px;
+    padding: 1px 5px;
+    color: var(--c-code);
+  }
+
+  /* 목록 줄의 행갈이 들여쓰기 */
+  .line-bullet {
+    display: block;
+    padding-left: 14px;
+    text-indent: -14px;
+  }
+}
