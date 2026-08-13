@@ -31,6 +31,31 @@ export type ChatRecord = {
   created_at: string;
 };
 
+export type SchemaColumn = {
+  name: string;
+  type: string;
+  nullable: boolean;
+  primary_key: boolean;
+  references: string | null;
+  comment: string;
+};
+
+export type SchemaTable = {
+  name: string;
+  description: string;
+  row_count: number | null;
+  /** 조회 시 :current_member_id 필터가 강제되는 테이블 */
+  row_level_secured: boolean;
+  columns: SchemaColumn[];
+  ddl: string;
+};
+
+export type SchemaInfo = {
+  tables: SchemaTable[];
+  relationships: { parent: string; child: string; note: string }[];
+  notes: { allowed_tables: string[]; personal_tables: string[] };
+};
+
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -107,6 +132,8 @@ export const api = {
     }),
 
   me: () => request<Member>("/members/me", { auth: true }),
+
+  schema: () => request<SchemaInfo>("/schema", { auth: true }),
 
   chat: (message: string) =>
     request<ChatRecord>("/chats", {

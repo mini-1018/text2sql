@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AuthScreen from "@/components/AuthScreen";
 import Composer from "@/components/Composer";
 import RichText from "@/components/RichText";
+import SchemaModal from "@/components/SchemaModal";
 import Sidebar from "@/components/Sidebar";
 import {
   IconArrowRight,
@@ -49,7 +50,7 @@ const SUGGESTIONS = [
   {
     kind: "작업",
     text: "1번 계좌에서 국민은행 813502-01-338771 동양소재로 300만원 이체해줘",
-    note: "기존 이체 API 호출 (SQL 직접 생성 안 함)",
+    note: "기존 이체 API 호출",
   },
 ];
 
@@ -70,6 +71,7 @@ export default function Page() {
   const [collapsed, setCollapsed] = useState(false);
   const [dark, setDark] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [schemaOpen, setSchemaOpen] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -123,6 +125,22 @@ export default function Page() {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [active?.turns.length, busy]);
+
+  /* ---------------- 모바일: 사이드바는 기본으로 접어 둔다 ---------------- */
+  //  데스크톱은 사이드바가 레이아웃을 차지하지만, 모바일에서는 화면 전체를 덮는
+  //  오버레이라 펼친 채로 두면 첫 진입 시 대화 화면이 가려진다.
+  useEffect(() => {
+    if (window.matchMedia("(max-width: 767px)").matches) setCollapsed(true);
+  }, []);
+
+  const isMobile = () =>
+    typeof window !== "undefined" &&
+    window.matchMedia("(max-width: 767px)").matches;
+
+  // 모바일에서 항목을 고르면 사이드바를 닫아 바로 대화가 보이게 한다.
+  const closeSidebarOnMobile = useCallback(() => {
+    if (isMobile()) setCollapsed(true);
+  }, []);
 
   /* ---------------- 액션 ---------------- */
   const toggleTheme = useCallback(() => {
@@ -294,11 +312,32 @@ export default function Page() {
         member={member}
         threads={threads}
         activeId={activeId}
-        onNew={startNew}
-        onPick={(id) => setActiveId(id)}
+        onNew={() => {
+          startNew();
+          closeSidebarOnMobile();
+        }}
+        onPick={(id) => {
+          setActiveId(id);
+          closeSidebarOnMobile();
+        }}
         onDelete={removeThread}
         onSignOut={signOut}
+        onOpenSchema={() => {
+          setSchemaOpen(true);
+          closeSidebarOnMobile();
+        }}
       />
+
+      {/* 모바일에서 사이드바가 열려 있을 때만 배경을 덮는다 (탭하면 닫힘) */}
+      {!collapsed && (
+        <div
+          onClick={() => setCollapsed(true)}
+          aria-hidden
+          className="fixed inset-0 z-20 bg-black/30 md:hidden"
+        />
+      )}
+
+      {schemaOpen && <SchemaModal onClose={() => setSchemaOpen(false)} />}
 
       <main className="flex min-w-0 flex-1 flex-col bg-canvas">
         <header className="flex h-[45px] shrink-0 items-center gap-1 border-b border-line px-3">
@@ -311,13 +350,13 @@ export default function Page() {
           >
             <IconSidebar />
           </button>
-          <div className="truncate rounded-sm px-[7px] py-[3px] text-[14px] font-medium">
+          <div className="min-w-0 flex-1 truncate rounded-sm px-1.75 py-0.75 text-[14px] font-medium">
             {active?.title ?? "새 대화"}
           </div>
-          <div className="flex-1" />
+          {/* 좁은 화면에서는 점만 남기고 문구는 숨긴다 */}
           <div
-            title="서버 연결 상태"
-            className="flex items-center gap-1.5 rounded-full border border-line py-[3px] pr-[9px] pl-2 text-[12px] text-ink-2"
+            title={status === "down" ? "서버 연결 끊김" : "서버 연결됨"}
+            className="flex shrink-0 items-center gap-1.5 rounded-full border border-line py-0.75 pr-2.25 pl-2 text-[12px] text-ink-2 max-sm:border-0 max-sm:px-1"
           >
             <span
               className={`size-1.5 shrink-0 rounded-full ${
@@ -328,7 +367,9 @@ export default function Page() {
                     : "bg-ink-3"
               }`}
             />
-            {status === "down" ? "서버 연결 끊김" : "서버 연결됨"}
+            <span className="max-sm:hidden">
+              {status === "down" ? "서버 연결 끊김" : "서버 연결됨"}
+            </span>
           </div>
           <button
             type="button"
@@ -345,9 +386,7 @@ export default function Page() {
           {turns.length === 0 ? (
             <section className="mx-auto max-w-measure px-14 pt-24 pb-6 max-md:px-5.5">
               <h1 className="mb-2.5 font-serif text-[38px] leading-tight font-bold tracking-[-0.018em] max-md:text-[30px]">
-                자금 현황을
-                <br />
-                묻는 대로 확인합니다.
+                자금 관리를, 질문 하나로.
               </h1>
               <p className="mb-8 max-w-[34rem] text-[15px] text-ink-2">
                 계좌 잔액과 입출금 내역에 대한 질문은 실시간으로 SQL로 변환되어

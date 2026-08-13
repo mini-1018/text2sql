@@ -90,6 +90,33 @@ export const IconLogout = ({ size = 15 }: P) => (
   </svg>
 );
 
+export const IconClose = ({ size = 16 }: P) => (
+  <svg {...base(size)}>
+    <path d="M6 6l12 12M18 6L6 18" />
+  </svg>
+);
+
+export const IconKey = ({ size = 10 }: P) => (
+  <svg {...base(size)} strokeWidth={2}>
+    <circle cx="8" cy="8" r="4.5" />
+    <path d="M11.5 11.5L20 20M17 17l2-2M14 14l2-2" />
+  </svg>
+);
+
+export const IconLink = ({ size = 10 }: P) => (
+  <svg {...base(size)} strokeWidth={2}>
+    <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 1 0-5.7-5.7l-1.5 1.5" />
+    <path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 1 0 5.7 5.7l1.5-1.5" />
+  </svg>
+);
+
+export const IconLock = ({ size = 10 }: P) => (
+  <svg {...base(size)} strokeWidth={2}>
+    <rect x="4" y="10" width="16" height="11" rx="2" />
+    <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+  </svg>
+);
+
 export const IconSearch = ({ size = 16 }: P) => (
   <svg {...base(size)}>
     <circle cx="11" cy="11" r="7" />

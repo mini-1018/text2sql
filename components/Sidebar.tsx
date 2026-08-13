@@ -22,6 +22,7 @@ export default function Sidebar({
   onPick,
   onDelete,
   onSignOut,
+  onOpenSchema,
 }: {
   collapsed: boolean;
   member: Member | null;
@@ -31,6 +32,7 @@ export default function Sidebar({
   onPick: (id: string) => void;
   onDelete: (id: string) => void;
   onSignOut: () => void;
+  onOpenSchema: () => void;
 }) {
   // 최신순 정렬 후 날짜 그룹으로 묶는다.
   const sorted = [...threads].sort((a, b) => b.updatedAt - a.updatedAt);
@@ -60,24 +62,32 @@ export default function Sidebar({
             T
           </span>
           <span className="truncate text-[14px] font-semibold tracking-[-0.005em]">
-            기업 자금관리 봇
+            기업 자금관리 어시스턴트
           </span>
         </button>
       </div>
 
       <nav className="flex flex-col gap-px px-2 pt-0.5 pb-2">
-        <button type="button" onClick={onNew} className={`${NAV} cursor-pointer`}>
+        <button
+          type="button"
+          onClick={onNew}
+          className={`${NAV} cursor-pointer`}
+        >
           <span className="shrink-0 text-ink-3">
             <IconPlus />
           </span>
           새 대화
         </button>
-        <div className={NAV}>
+        <button
+          type="button"
+          onClick={onOpenSchema}
+          className={`${NAV} cursor-pointer`}
+        >
           <span className="shrink-0 text-ink-3">
             <IconDatabase />
           </span>
-          연결된 데이터베이스
-        </div>
+          데이터베이스 보기
+        </button>
       </nav>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pt-2.5 pb-2">

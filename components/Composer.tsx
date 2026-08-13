@@ -51,11 +51,13 @@ export default function Composer({
           className="block max-h-55 w-full resize-none overflow-y-auto border-none bg-transparent px-3.75 pt-3.25 pb-1 text-[15px] leading-relaxed outline-none placeholder:text-ink-3"
         />
         <div className="flex items-center gap-2 pt-1.5 pr-2 pb-2 pl-3.5">
-          <span className="flex-1 text-[12px] text-ink-3">
+          {/* 물리 키보드가 없는 모바일에서는 단축키 안내를 숨긴다 */}
+          <span className="flex-1 text-[12px] text-ink-3 max-sm:hidden">
             <kbd className={KBD}>Enter</kbd> 전송 ·{" "}
             <kbd className={KBD}>Shift</kbd> + <kbd className={KBD}>Enter</kbd>{" "}
             줄바꿈
           </span>
+          <span className="hidden flex-1 max-sm:block" aria-hidden />
           <button
             type="button"
             onClick={onSend}
