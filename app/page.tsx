@@ -57,6 +57,13 @@ const SUGGESTIONS = [
 const ICON_BTN =
   "grid size-7 cursor-pointer place-items-center rounded-sm text-ink-2 transition-colors hover:bg-hover hover:text-ink";
 
+//  Tailwind 의 md 브레이크포인트(48rem = 768px)와 맞춘다.
+//  이 폭 미만에서 사이드바는 레이아웃을 차지하지 않고 화면을 덮는 오버레이가 된다.
+const MOBILE_QUERY = "(max-width: 767px)";
+
+const isMobile = () =>
+  typeof window !== "undefined" && window.matchMedia(MOBILE_QUERY).matches;
+
 type Status = "checking" | "ok" | "down";
 
 export default function Page() {
@@ -68,7 +75,9 @@ export default function Page() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  //  초기값부터 모바일이면 접힌 상태로 시작한다.
+  //  (사이드바는 ready && member 이후에만 렌더되므로 하이드레이션 불일치가 없다)
+  const [collapsed, setCollapsed] = useState(isMobile);
   const [dark, setDark] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [schemaOpen, setSchemaOpen] = useState(false);
@@ -126,16 +135,22 @@ export default function Page() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [active?.turns.length, busy]);
 
-  /* ---------------- 모바일: 사이드바는 기본으로 접어 둔다 ---------------- */
-  //  데스크톱은 사이드바가 레이아웃을 차지하지만, 모바일에서는 화면 전체를 덮는
-  //  오버레이라 펼친 채로 두면 첫 진입 시 대화 화면이 가려진다.
+  /* ---------------- 모바일: 사이드바는 항상 접힌 채로 시작 ---------------- */
+  //  로그인 화면 → 워크스페이스로 넘어오는 시점에도 다시 확인한다.
+  //  (마운트 시 1회만 검사하면 그 사이 상태가 어긋났을 때 열린 채로 진입한다)
   useEffect(() => {
-    if (window.matchMedia("(max-width: 767px)").matches) setCollapsed(true);
-  }, []);
+    if (member && isMobile()) setCollapsed(true);
+  }, [member]);
 
-  const isMobile = () =>
-    typeof window !== "undefined" &&
-    window.matchMedia("(max-width: 767px)").matches;
+  //  가로 → 세로 회전 등으로 모바일 폭이 되면 접는다.
+  useEffect(() => {
+    const mq = window.matchMedia(MOBILE_QUERY);
+    const onChange = (e: MediaQueryListEvent) => {
+      if (e.matches) setCollapsed(true);
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
 
   // 모바일에서 항목을 고르면 사이드바를 닫아 바로 대화가 보이게 한다.
   const closeSidebarOnMobile = useCallback(() => {
