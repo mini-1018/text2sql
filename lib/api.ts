@@ -23,11 +23,47 @@ export type Member = {
   created_at: string;
 };
 
+export type PendingTransfer = {
+  id: number;
+  from_bank: string;
+  from_account_no: string;
+  from_alias: string | null;
+  to_bank: string;
+  to_account_no: string;
+  to_holder: string;
+  amount: string; // Decimal 직렬화
+  balance_after: string;
+  expires_at: string;
+};
+
+export type ChatMeta = {
+  source: "catalog" | "generated" | "action" | "general";
+  template_name: string | null;
+  elapsed_ms: number;
+  sql: string | null;
+  retry_count: number;
+};
+
 export type ChatRecord = {
   id: number;
   member_id: number;
   request: string;
   response: string;
+  created_at: string;
+  pending_transfer: PendingTransfer | null;
+  meta: ChatMeta | null;
+};
+
+export type TransferRecord = {
+  id: number;
+  member_id: number;
+  from_account_id: number;
+  to_bank: string;
+  to_account_no: string;
+  to_holder: string;
+  amount: string;
+  memo: string | null;
+  status: string;
   created_at: string;
 };
 
@@ -140,5 +176,25 @@ export const api = {
       method: "POST",
       auth: true,
       body: JSON.stringify({ message }),
+    }),
+
+  // 대화 이력 (최신순) — 로그인 시 스레드 복원에 사용
+  chatHistory: (limit = 300) =>
+    request<ChatRecord[]>(`/chats?limit=${limit}`, { auth: true }),
+
+  deleteChat: (id: number) =>
+    request<void>(`/chats/${id}`, { method: "DELETE", auth: true }),
+
+  // 이체 확인 카드의 버튼에서만 호출된다 — LLM 은 이 실행 경로를 부를 수 없다.
+  confirmTransfer: (id: number) =>
+    request<TransferRecord>(`/transfers/${id}/confirm`, {
+      method: "POST",
+      auth: true,
+    }),
+
+  cancelTransfer: (id: number) =>
+    request<TransferRecord>(`/transfers/${id}`, {
+      method: "DELETE",
+      auth: true,
     }),
 };

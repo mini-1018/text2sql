@@ -10,17 +10,17 @@ import {
   IconArrowRight,
   IconCheck,
   IconCopy,
+  IconDatabase,
   IconMoon,
   IconSidebar,
   IconSun,
 } from "@/components/icons";
 import { api, ApiError, clearToken, getToken, type Member } from "@/lib/api";
 import {
-  clearThreads,
-  loadThreads,
-  newThread,
-  saveThreads,
+  buildThreads,
+  parseUtc,
   titleFrom,
+  todayId,
   uid,
   type Thread,
   type Turn,
@@ -50,9 +50,17 @@ const SUGGESTIONS = [
   {
     kind: "작업",
     text: "1번 계좌에서 국민은행 813502-01-338771 동양소재로 300만원 이체해줘",
-    note: "기존 이체 API 호출",
+    note: "이체 준비 → 요약 확인 → 버튼으로 실행 (2단계)",
   },
 ];
+
+/** 응답 경로 배지 라벨 */
+const SOURCE_LABEL: Record<string, string> = {
+  catalog: "카탈로그 매칭",
+  generated: "SQL 생성",
+  action: "작업",
+  general: "대화",
+};
 
 const ICON_BTN =
   "grid size-7 cursor-pointer place-items-center rounded-sm text-ink-2 transition-colors hover:bg-hover hover:text-ink";
@@ -81,6 +89,10 @@ export default function Page() {
   const [dark, setDark] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [schemaOpen, setSchemaOpen] = useState(false);
+  //  'SQL 보기'가 열려 있는 턴 id 집합
+  const [sqlOpen, setSqlOpen] = useState<Set<string>>(new Set());
+  //  확인/취소 요청이 진행 중인 이체 id (버튼 중복 클릭 방지)
+  const [pendingBusy, setPendingBusy] = useState<number | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -100,18 +112,20 @@ export default function Page() {
       return;
     }
 
+    //  프로필 확인 후 서버에서 대화 이력을 불러와 스레드를 복원한다.
+    //  (이력의 원본은 서버 — 브라우저를 바꿔도 유지된다)
     api
       .me()
-      .then((m) => {
+      .then(async (m) => {
         setMember(m);
         setStatus("ok");
-        const restored = loadThreads();
-        setThreads(restored);
-        setActiveId(
-          restored.length
-            ? [...restored].sort((a, b) => b.updatedAt - a.updatedAt)[0].id
-            : null,
-        );
+        try {
+          const restored = buildThreads(await api.chatHistory());
+          setThreads(restored);
+          setActiveId(restored.length ? restored[0].id : null);
+        } catch {
+          /* 이력 로드 실패는 치명적이지 않다 — 빈 상태로 시작 */
+        }
       })
       .catch((err) => {
         // 토큰 만료/무효 → 로그인 화면으로. 네트워크 오류는 상태 배지로 표시.
@@ -123,11 +137,6 @@ export default function Page() {
       })
       .finally(() => setReady(true));
   }, []);
-
-  /* ---------------- 스레드 변경 시 로컬 저장 ---------------- */
-  useEffect(() => {
-    if (ready && member) saveThreads(threads);
-  }, [threads, ready, member]);
 
   /* ---------------- 새 메시지 도착 시 하단으로 스크롤 ---------------- */
   useEffect(() => {
@@ -175,33 +184,52 @@ export default function Page() {
   const afterAuth = useCallback(() => {
     api
       .me()
-      .then((m) => {
+      .then(async (m) => {
         setMember(m);
-        const restored = loadThreads();
-        setThreads(restored);
-        setActiveId(restored.length ? restored[0].id : null);
+        try {
+          const restored = buildThreads(await api.chatHistory());
+          setThreads(restored);
+          setActiveId(restored.length ? restored[0].id : null);
+        } catch {
+          /* 이력 없이 시작 */
+        }
       })
       .catch(() => clearToken());
   }, []);
 
   const signOut = useCallback(() => {
     clearToken();
-    clearThreads();
     setMember(null);
     setThreads([]);
     setActiveId(null);
     setDraft("");
   }, []);
 
+  //  스레드 = 하루 단위. "새 대화"는 오늘 스레드로 이동한다 (없으면 생성).
   const startNew = useCallback(() => {
-    const t = newThread();
-    setThreads((prev) => [t, ...prev]);
-    setActiveId(t.id);
+    const id = todayId();
+    setThreads((prev) =>
+      prev.some((t) => t.id === id)
+        ? prev
+        : [{ id, title: "새 대화", turns: [], updatedAt: Date.now() }, ...prev],
+    );
+    setActiveId(id);
     setDraft("");
   }, []);
 
+  //  스레드 삭제 = 그 날의 대화를 서버에서 소프트 삭제 (다시 로그인해도 안 보인다)
   const removeThread = useCallback(
     (id: string) => {
+      const target = threads.find((t) => t.id === id);
+      const chatIds = [
+        ...new Set(
+          (target?.turns ?? [])
+            .map((x) => x.chatId)
+            .filter((x): x is number => typeof x === "number"),
+        ),
+      ];
+      void Promise.allSettled(chatIds.map((cid) => api.deleteChat(cid)));
+
       setThreads((prev) => {
         const next = prev.filter((t) => t.id !== id);
         if (id === activeId) {
@@ -211,7 +239,7 @@ export default function Page() {
         return next;
       });
     },
-    [activeId],
+    [activeId, threads],
   );
 
   const copyTurn = useCallback((turn: Turn) => {
@@ -231,15 +259,8 @@ export default function Page() {
       const message = (raw ?? draft).trim();
       if (!message || busy) return;
 
-      // 활성 스레드가 없으면 새로 만든다.
-      let threadId = activeId;
-      if (!threadId) {
-        const t = newThread();
-        threadId = t.id;
-        setThreads((prev) => [t, ...prev]);
-        setActiveId(t.id);
-      }
-
+      // 새 메시지는 항상 오늘 스레드에 쌓인다 (이력이 하루 단위이므로).
+      const threadId = todayId();
       const userTurn: Turn = {
         id: uid(),
         role: "user",
@@ -249,8 +270,16 @@ export default function Page() {
 
       setDraft("");
       setBusy(true);
-      setThreads((prev) =>
-        prev.map((t) =>
+      setActiveId(threadId);
+      setThreads((prev) => {
+        const exists = prev.some((t) => t.id === threadId);
+        const base = exists
+          ? prev
+          : [
+              { id: threadId, title: titleFrom(message), turns: [], updatedAt: Date.now() },
+              ...prev,
+            ];
+        return base.map((t) =>
           t.id === threadId
             ? {
                 ...t,
@@ -259,17 +288,37 @@ export default function Page() {
                 updatedAt: Date.now(),
               }
             : t,
-        ),
-      );
+        );
+      });
 
       try {
         const record = await api.chat(message);
         setStatus("ok");
+        const p = record.pending_transfer;
         const reply: Turn = {
           id: uid(),
+          chatId: record.id,
           role: "assistant",
           text: record.response,
-          at: new Date(record.created_at).getTime() || Date.now(),
+          // 서버는 naive UTC 를 주므로 반드시 parseUtc 로 해석 (KST 표시가 어긋나지 않게)
+          at: parseUtc(record.created_at),
+          meta: record.meta
+            ? {
+                source: record.meta.source,
+                templateName: record.meta.template_name,
+                elapsedMs: record.meta.elapsed_ms,
+                sql: record.meta.sql,
+              }
+            : undefined,
+          pending: p
+            ? {
+                transferId: p.id,
+                fromLabel: `${p.from_bank} ${p.from_account_no}${p.from_alias ? ` (${p.from_alias})` : ""}`,
+                toLabel: `${p.to_bank} ${p.to_account_no} (${p.to_holder})`,
+                amount: Number(p.amount),
+                balanceAfter: Number(p.balance_after),
+              }
+            : undefined,
         };
         setThreads((prev) =>
           prev.map((t) =>
@@ -310,8 +359,88 @@ export default function Page() {
         setBusy(false);
       }
     },
-    [draft, busy, activeId],
+    [draft, busy],
   );
+
+  /* ---------------- 이체 확인 카드 ---------------- */
+  //  스레드 안의 특정 턴을 부분 갱신한다 (확인/취소 후 카드 상태 고정용)
+  const patchTurn = useCallback(
+    (turnId: string, patch: (turn: Turn) => Turn) => {
+      setThreads((prev) =>
+        prev.map((t) =>
+          t.turns.some((x) => x.id === turnId)
+            ? { ...t, turns: t.turns.map((x) => (x.id === turnId ? patch(x) : x)) }
+            : t,
+        ),
+      );
+    },
+    [],
+  );
+
+  const appendAssistant = useCallback(
+    (threadId: string, text: string, error = false) => {
+      const turn: Turn = { id: uid(), role: "assistant", text, at: Date.now(), error };
+      setThreads((prev) =>
+        prev.map((t) =>
+          t.id === threadId
+            ? { ...t, turns: [...t.turns, turn], updatedAt: Date.now() }
+            : t,
+        ),
+      );
+    },
+    [],
+  );
+
+  const resolvePending = useCallback(
+    async (turn: Turn, action: "confirm" | "cancel") => {
+      if (!turn.pending || turn.pending.resolved || !activeId) return;
+      const transferId = turn.pending.transferId;
+      setPendingBusy(transferId);
+      try {
+        if (action === "confirm") {
+          const r = await api.confirmTransfer(transferId);
+          patchTurn(turn.id, (x) => ({
+            ...x,
+            pending: { ...x.pending!, resolved: "confirmed" },
+          }));
+          appendAssistant(
+            activeId,
+            `이체가 완료되었습니다.\n- 이체번호: ${r.id}\n- 수취인: ${r.to_holder}\n- 이체금액: ${Number(r.amount).toLocaleString("ko-KR")}원`,
+          );
+        } else {
+          await api.cancelTransfer(transferId);
+          patchTurn(turn.id, (x) => ({
+            ...x,
+            pending: { ...x.pending!, resolved: "canceled" },
+          }));
+          appendAssistant(activeId, "이체가 취소되었습니다.");
+        }
+      } catch (err) {
+        const msg =
+          err instanceof ApiError ? err.message : "요청을 처리하지 못했습니다.";
+        // 만료된 PENDING 은 백엔드가 자동 취소한다 — 카드도 만료로 고정
+        if (msg.includes("유효시간")) {
+          patchTurn(turn.id, (x) => ({
+            ...x,
+            pending: { ...x.pending!, resolved: "expired" },
+          }));
+        }
+        appendAssistant(activeId, msg, true);
+      } finally {
+        setPendingBusy(null);
+      }
+    },
+    [activeId, appendAssistant, patchTurn],
+  );
+
+  const toggleSql = useCallback((turnId: string) => {
+    setSqlOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(turnId)) next.delete(turnId);
+      else next.add(turnId);
+      return next;
+    });
+  }, []);
 
   /* ---------------- 렌더 ---------------- */
   if (!ready) return <div className="min-h-dvh bg-canvas" />;
@@ -461,6 +590,18 @@ export default function Page() {
                         minute: "2-digit",
                       })}
                     </span>
+                    {turn.meta && (
+                      <span
+                        className="text-[11px] text-ink-3"
+                        title="응답 처리 경로 · 소요 시간"
+                      >
+                        · {SOURCE_LABEL[turn.meta.source] ?? turn.meta.source}
+                        {turn.meta.templateName
+                          ? ` — ${turn.meta.templateName}`
+                          : ""}{" "}
+                        · {(turn.meta.elapsedMs / 1000).toFixed(1)}s
+                      </span>
+                    )}
                   </div>
 
                   <div
@@ -471,17 +612,96 @@ export default function Page() {
                     <RichText text={turn.text} />
                   </div>
 
+                  {turn.pending && (
+                    <div className="mt-3 ml-7 max-w-104 rounded-lg border border-line-2 bg-elevated shadow-card">
+                      <div className="border-b border-line px-4 py-2.5 text-[12px] font-semibold tracking-wider text-ink-3 uppercase">
+                        이체 확인
+                      </div>
+                      <dl className="grid grid-cols-[64px_1fr] gap-x-3 gap-y-1.5 px-4 py-3 text-[13.5px]">
+                        <dt className="text-ink-3">출금</dt>
+                        <dd className="m-0">{turn.pending.fromLabel}</dd>
+                        <dt className="text-ink-3">수취</dt>
+                        <dd className="m-0">{turn.pending.toLabel}</dd>
+                        <dt className="text-ink-3">금액</dt>
+                        <dd className="m-0 font-semibold">
+                          {turn.pending.amount.toLocaleString("ko-KR")}원
+                        </dd>
+                        <dt className="text-ink-3">실행 후</dt>
+                        <dd className="m-0 text-ink-2">
+                          잔액 {turn.pending.balanceAfter.toLocaleString("ko-KR")}원
+                        </dd>
+                      </dl>
+                      <div className="flex items-center gap-2 border-t border-line px-4 py-2.5">
+                        {turn.pending.resolved ? (
+                          <span
+                            className={`text-[12.5px] font-medium ${
+                              turn.pending.resolved === "confirmed"
+                                ? "text-ok"
+                                : "text-ink-3"
+                            }`}
+                          >
+                            {turn.pending.resolved === "confirmed"
+                              ? "실행 완료"
+                              : turn.pending.resolved === "canceled"
+                                ? "취소됨"
+                                : "유효시간 만료"}
+                          </span>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              disabled={pendingBusy === turn.pending.transferId}
+                              onClick={() => resolvePending(turn, "confirm")}
+                              className="cursor-pointer rounded-md bg-ink px-3.5 py-1.5 text-[13px] font-medium text-canvas transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-45"
+                            >
+                              {pendingBusy === turn.pending.transferId
+                                ? "처리 중…"
+                                : "이체 실행"}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={pendingBusy === turn.pending.transferId}
+                              onClick={() => resolvePending(turn, "cancel")}
+                              className="cursor-pointer rounded-md border border-line-2 px-3.5 py-1.5 text-[13px] text-ink-2 transition-colors hover:bg-hover disabled:cursor-not-allowed disabled:opacity-45"
+                            >
+                              취소
+                            </button>
+                            <span className="ml-auto text-[11.5px] text-ink-3">
+                              5분 내 확인
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {turn.role === "assistant" && !turn.error && (
                     <div className="mt-2 flex gap-0.5 pl-7 opacity-0 transition-opacity group-hover:opacity-100">
                       <button
                         type="button"
                         onClick={() => copyTurn(turn)}
-                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-sm px-[7px] py-[3px] text-[12px] text-ink-3 transition-colors hover:bg-hover hover:text-ink-2"
+                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-sm px-1.75 py-0.75 text-[12px] text-ink-3 transition-colors hover:bg-hover hover:text-ink-2"
                       >
                         {copiedId === turn.id ? <IconCheck /> : <IconCopy />}
                         {copiedId === turn.id ? "복사됨" : "복사"}
                       </button>
+                      {turn.meta?.sql && (
+                        <button
+                          type="button"
+                          onClick={() => toggleSql(turn.id)}
+                          className="inline-flex cursor-pointer items-center gap-1.5 rounded-sm px-1.75 py-0.75 text-[12px] text-ink-3 transition-colors hover:bg-hover hover:text-ink-2"
+                        >
+                          <IconDatabase size={12} />
+                          {sqlOpen.has(turn.id) ? "SQL 닫기" : "SQL 보기"}
+                        </button>
+                      )}
                     </div>
+                  )}
+
+                  {turn.meta?.sql && sqlOpen.has(turn.id) && (
+                    <pre className="mt-2 ml-7 overflow-x-auto rounded-md border border-line bg-inset px-3.5 py-3 font-mono text-[12px] leading-relaxed text-ink-2">
+                      {turn.meta.sql}
+                    </pre>
                   )}
                 </article>
               ))}
