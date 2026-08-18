@@ -23,16 +23,18 @@ export type Member = {
   created_at: string;
 };
 
-export type PendingTransfer = {
+export type PendingOrder = {
   id: number;
-  from_bank: string;
-  from_account_no: string;
-  from_alias: string | null;
-  to_bank: string;
-  to_account_no: string;
-  to_holder: string;
-  amount: string; // Decimal 직렬화
-  balance_after: string;
+  product_sku: string;
+  product_name: string;
+  supplier_name: string;
+  quantity: number;
+  unit: string;
+  unit_price: string; // Decimal 직렬화
+  total_amount: string;
+  stock_before: number;
+  stock_after: number;
+  expected_date: string | null;
   expires_at: string;
 };
 
@@ -50,18 +52,19 @@ export type ChatRecord = {
   request: string;
   response: string;
   created_at: string;
-  pending_transfer: PendingTransfer | null;
+  pending_order: PendingOrder | null;
   meta: ChatMeta | null;
 };
 
-export type TransferRecord = {
+export type OrderRecord = {
   id: number;
   member_id: number;
-  from_account_id: number;
-  to_bank: string;
-  to_account_no: string;
-  to_holder: string;
-  amount: string;
+  product_id: number;
+  supplier_id: number;
+  quantity: number;
+  unit_price: string;
+  total_amount: string;
+  expected_date: string | null;
   memo: string | null;
   status: string;
   created_at: string;
@@ -185,15 +188,15 @@ export const api = {
   deleteChat: (id: number) =>
     request<void>(`/chats/${id}`, { method: "DELETE", auth: true }),
 
-  // 이체 확인 카드의 버튼에서만 호출된다 — LLM 은 이 실행 경로를 부를 수 없다.
-  confirmTransfer: (id: number) =>
-    request<TransferRecord>(`/transfers/${id}/confirm`, {
+  // 발주 확인 카드의 버튼에서만 호출된다 — LLM 은 이 실행 경로를 부를 수 없다.
+  confirmOrder: (id: number) =>
+    request<OrderRecord>(`/orders/${id}/confirm`, {
       method: "POST",
       auth: true,
     }),
 
-  cancelTransfer: (id: number) =>
-    request<TransferRecord>(`/transfers/${id}`, {
+  cancelOrder: (id: number) =>
+    request<OrderRecord>(`/orders/${id}`, {
       method: "DELETE",
       auth: true,
     }),

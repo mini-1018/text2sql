@@ -62,7 +62,7 @@ export default function Sidebar({
             T
           </span>
           <span className="truncate text-[14px] font-semibold tracking-[-0.005em]">
-            기업 자금관리 어시스턴트
+            상품 재고·발주 관리 챗봇
           </span>
         </button>
       </div>

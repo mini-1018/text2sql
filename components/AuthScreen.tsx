@@ -43,10 +43,10 @@ export default function AuthScreen({ onDone }: { onDone: () => void }) {
     <div className="grid min-h-dvh place-items-center bg-canvas px-6 py-8">
       <div className="w-full max-w-[360px]">
         <h1 className="mb-1.5 font-serif text-[27px] font-bold tracking-[-0.015em]">
-          기업 자금관리 어시스턴트
+          상품 재고·발주 관리 챗봇
         </h1>
         <p className="mb-[26px] text-[14px] text-ink-2">
-          법인 계좌와 입출금 내역에 자연어로 질문하고, 이체까지 처리합니다.
+          상품 재고와 입출고 내역에 자연어로 질문하고, 발주까지 처리합니다.
         </p>
 
         {error && (

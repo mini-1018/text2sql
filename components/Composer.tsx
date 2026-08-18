@@ -46,7 +46,7 @@ export default function Composer({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="자금 현황을 묻거나 이체를 요청하세요"
+          placeholder="재고 현황을 묻거나 발주를 요청하세요"
           aria-label="메시지 입력"
           className="block max-h-55 w-full resize-none overflow-y-auto border-none bg-transparent px-3.75 pt-3.25 pb-1 text-[15px] leading-relaxed outline-none placeholder:text-ink-3"
         />

@@ -29,28 +29,28 @@ import {
 const SUGGESTIONS = [
   {
     kind: "조회",
-    text: "우리 회사 계좌 잔액을 전부 보여줘",
-    note: "담당 계좌만 조회 (행 수준 접근 통제)",
+    text: "재고가 부족해서 발주해야 할 상품 알려줘",
+    note: "안전재고 미달 판정 (담당 상품만 조회)",
   },
   {
     kind: "통계",
-    text: "은행별 잔액 합계를 알려줘",
-    note: "GROUP BY 집계",
+    text: "카테고리별 재고 금액 합계를 알려줘",
+    note: "GROUP BY 집계 + 수량×단가 계산",
   },
   {
     kind: "통계",
-    text: "최근 3개월 동안 거래분류별 출금액을 알려줘",
-    note: "기간 필터 + 분류별 집계",
+    text: "최근 3개월 사유별 출고량 알려줘",
+    note: "기간 필터 + 사유분류별 집계",
   },
   {
     kind: "조회",
-    text: "500만원 이상 출금된 거래 내역 보여줘",
-    note: "조건 필터 + 계좌 조인",
+    text: "90일 동안 안 나간 상품 있어?",
+    note: "NOT EXISTS 로 장기 미출고 탐지",
   },
   {
     kind: "작업",
-    text: "1번 계좌에서 국민은행 813502-01-338771 동양소재로 300만원 이체해줘",
-    note: "이체 준비 → 요약 확인 → 버튼으로 실행 (2단계)",
+    text: "3번 상품 200개 발주해줘",
+    note: "확인 카드 → 버튼으로만 확정 (LLM 실행 권한 없음)",
   },
 ];
 
@@ -91,7 +91,7 @@ export default function Page() {
   const [schemaOpen, setSchemaOpen] = useState(false);
   //  'SQL 보기'가 열려 있는 턴 id 집합
   const [sqlOpen, setSqlOpen] = useState<Set<string>>(new Set());
-  //  확인/취소 요청이 진행 중인 이체 id (버튼 중복 클릭 방지)
+  //  확인/취소 요청이 진행 중인 발주 id (버튼 중복 클릭 방지)
   const [pendingBusy, setPendingBusy] = useState<number | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -294,7 +294,7 @@ export default function Page() {
       try {
         const record = await api.chat(message);
         setStatus("ok");
-        const p = record.pending_transfer;
+        const p = record.pending_order;
         const reply: Turn = {
           id: uid(),
           chatId: record.id,
@@ -312,11 +312,16 @@ export default function Page() {
             : undefined,
           pending: p
             ? {
-                transferId: p.id,
-                fromLabel: `${p.from_bank} ${p.from_account_no}${p.from_alias ? ` (${p.from_alias})` : ""}`,
-                toLabel: `${p.to_bank} ${p.to_account_no} (${p.to_holder})`,
-                amount: Number(p.amount),
-                balanceAfter: Number(p.balance_after),
+                orderId: p.id,
+                productLabel: `${p.product_sku} ${p.product_name}`,
+                supplierLabel: p.expected_date
+                  ? `${p.supplier_name} · 입고예정 ${p.expected_date}`
+                  : p.supplier_name,
+                quantity: p.quantity,
+                unit: p.unit,
+                totalAmount: Number(p.total_amount),
+                stockBefore: p.stock_before,
+                stockAfter: p.stock_after,
               }
             : undefined,
         };
@@ -362,7 +367,7 @@ export default function Page() {
     [draft, busy],
   );
 
-  /* ---------------- 이체 확인 카드 ---------------- */
+  /* ---------------- 발주 확인 카드 ---------------- */
   //  스레드 안의 특정 턴을 부분 갱신한다 (확인/취소 후 카드 상태 고정용)
   const patchTurn = useCallback(
     (turnId: string, patch: (turn: Turn) => Turn) => {
@@ -394,26 +399,33 @@ export default function Page() {
   const resolvePending = useCallback(
     async (turn: Turn, action: "confirm" | "cancel") => {
       if (!turn.pending || turn.pending.resolved || !activeId) return;
-      const transferId = turn.pending.transferId;
-      setPendingBusy(transferId);
+      const orderId = turn.pending.orderId;
+      const label = turn.pending.productLabel;
+      setPendingBusy(orderId);
       try {
         if (action === "confirm") {
-          const r = await api.confirmTransfer(transferId);
+          const r = await api.confirmOrder(orderId);
           patchTurn(turn.id, (x) => ({
             ...x,
             pending: { ...x.pending!, resolved: "confirmed" },
           }));
           appendAssistant(
             activeId,
-            `이체가 완료되었습니다.\n- 이체번호: ${r.id}\n- 수취인: ${r.to_holder}\n- 이체금액: ${Number(r.amount).toLocaleString("ko-KR")}원`,
+            [
+              "발주가 확정되어 입고 처리되었습니다.",
+              `- 발주번호: ${r.id}`,
+              `- 상품: ${label}`,
+              `- 수량: ${r.quantity.toLocaleString("ko-KR")}개`,
+              `- 발주금액: ${Number(r.total_amount).toLocaleString("ko-KR")}원`,
+            ].join("\n"),
           );
         } else {
-          await api.cancelTransfer(transferId);
+          await api.cancelOrder(orderId);
           patchTurn(turn.id, (x) => ({
             ...x,
             pending: { ...x.pending!, resolved: "canceled" },
           }));
-          appendAssistant(activeId, "이체가 취소되었습니다.");
+          appendAssistant(activeId, "발주가 취소되었습니다.");
         }
       } catch (err) {
         const msg =
@@ -530,12 +542,12 @@ export default function Page() {
           {turns.length === 0 ? (
             <section className="mx-auto max-w-measure px-14 pt-24 pb-6 max-md:px-5.5">
               <h1 className="mb-2.5 font-serif text-[38px] leading-tight font-bold tracking-[-0.018em] max-md:text-[30px]">
-                자금 관리를, 질문 하나로.
+                재고 관리를, 질문 하나로.
               </h1>
               <p className="mb-8 max-w-[34rem] text-[15px] text-ink-2">
-                계좌 잔액과 입출금 내역에 대한 질문은 실시간으로 SQL로 변환되어
-                조회되고, 이체·취소처럼 자금이 움직이는 작업은 검증된 기존 API를
-                통해서만 처리됩니다.
+                재고 현황과 입출고 이력에 대한 질문은 검수된 쿼리 카탈로그에서
+                찾거나 실시간 SQL로 변환되어 조회되고, 발주처럼 재고가 움직이는
+                작업은 확인 절차를 거쳐 검증된 API로만 처리됩니다.
               </p>
 
               <div className="mb-2 text-[11px] font-semibold tracking-[0.05em] text-ink-3 uppercase">
@@ -615,20 +627,28 @@ export default function Page() {
                   {turn.pending && (
                     <div className="mt-3 ml-7 max-w-104 rounded-lg border border-line-2 bg-elevated shadow-card">
                       <div className="border-b border-line px-4 py-2.5 text-[12px] font-semibold tracking-wider text-ink-3 uppercase">
-                        이체 확인
+                        발주 확인
                       </div>
-                      <dl className="grid grid-cols-[64px_1fr] gap-x-3 gap-y-1.5 px-4 py-3 text-[13.5px]">
-                        <dt className="text-ink-3">출금</dt>
-                        <dd className="m-0">{turn.pending.fromLabel}</dd>
-                        <dt className="text-ink-3">수취</dt>
-                        <dd className="m-0">{turn.pending.toLabel}</dd>
-                        <dt className="text-ink-3">금액</dt>
+                      <dl className="grid grid-cols-[68px_1fr] gap-x-3 gap-y-1.5 px-4 py-3 text-[13.5px]">
+                        <dt className="text-ink-3">상품</dt>
+                        <dd className="m-0">{turn.pending.productLabel}</dd>
+                        <dt className="text-ink-3">공급업체</dt>
+                        <dd className="m-0">{turn.pending.supplierLabel}</dd>
+                        <dt className="text-ink-3">수량</dt>
                         <dd className="m-0 font-semibold">
-                          {turn.pending.amount.toLocaleString("ko-KR")}원
+                          {turn.pending.quantity.toLocaleString("ko-KR")}
+                          {turn.pending.unit}
                         </dd>
-                        <dt className="text-ink-3">실행 후</dt>
+                        <dt className="text-ink-3">발주금액</dt>
+                        <dd className="m-0 font-semibold">
+                          {turn.pending.totalAmount.toLocaleString("ko-KR")}원
+                        </dd>
+                        <dt className="text-ink-3">입고 후</dt>
                         <dd className="m-0 text-ink-2">
-                          잔액 {turn.pending.balanceAfter.toLocaleString("ko-KR")}원
+                          재고 {turn.pending.stockBefore.toLocaleString("ko-KR")}
+                          {" → "}
+                          {turn.pending.stockAfter.toLocaleString("ko-KR")}
+                          {turn.pending.unit}
                         </dd>
                       </dl>
                       <div className="flex items-center gap-2 border-t border-line px-4 py-2.5">
@@ -641,7 +661,7 @@ export default function Page() {
                             }`}
                           >
                             {turn.pending.resolved === "confirmed"
-                              ? "실행 완료"
+                              ? "확정 완료"
                               : turn.pending.resolved === "canceled"
                                 ? "취소됨"
                                 : "유효시간 만료"}
@@ -650,17 +670,17 @@ export default function Page() {
                           <>
                             <button
                               type="button"
-                              disabled={pendingBusy === turn.pending.transferId}
+                              disabled={pendingBusy === turn.pending.orderId}
                               onClick={() => resolvePending(turn, "confirm")}
                               className="cursor-pointer rounded-md bg-ink px-3.5 py-1.5 text-[13px] font-medium text-canvas transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-45"
                             >
-                              {pendingBusy === turn.pending.transferId
+                              {pendingBusy === turn.pending.orderId
                                 ? "처리 중…"
-                                : "이체 실행"}
+                                : "발주 확정"}
                             </button>
                             <button
                               type="button"
-                              disabled={pendingBusy === turn.pending.transferId}
+                              disabled={pendingBusy === turn.pending.orderId}
                               onClick={() => resolvePending(turn, "cancel")}
                               className="cursor-pointer rounded-md border border-line-2 px-3.5 py-1.5 text-[13px] text-ink-2 transition-colors hover:bg-hover disabled:cursor-not-allowed disabled:opacity-45"
                             >

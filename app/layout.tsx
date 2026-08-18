@@ -2,9 +2,9 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "기업 자금관리 어시스턴트",
+  title: "상품 재고·발주 관리 챗봇",
   description:
-    "법인 계좌와 입출금 내역에 자연어로 질문하면 실시간 SQL로 조회하고, 이체는 검증된 API로 처리하는 Text-to-SQL 워크스페이스",
+    "상품 재고와 입출고 내역에 자연어로 질문하면 검수된 쿼리 카탈로그와 실시간 SQL로 조회하고, 발주는 확인 절차를 거쳐 검증된 API로 처리하는 Text-to-SQL 워크스페이스",
 };
 
 export const viewport: Viewport = {

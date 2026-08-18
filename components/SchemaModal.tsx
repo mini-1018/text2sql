@@ -169,7 +169,7 @@ export default function SchemaModal({ onClose }: { onClose: () => void }) {
                   member_id = :current_member_id
                 </code>{" "}
                 필터가 없으면 검증 단계에서 거부됩니다. 담당자는 본인이 관리하는
-                계좌와 거래만 조회할 수 있습니다.
+                상품과 입출고 이력만 조회할 수 있습니다.
               </div>
 
               <div className="flex flex-col gap-5">

@@ -14,12 +14,15 @@ export type TurnMeta = {
 };
 
 export type TurnPending = {
-  transferId: number;
-  fromLabel: string; // "국민은행 123456-04-011234 (주거래 입출금)"
-  toLabel: string; // "국민은행 813502-01-338771 (동양소재)"
-  amount: number;
-  balanceAfter: number;
-  /** 확인/취소/만료 후 카드가 비활성 상태로 남는다 */
+  orderId: number;
+  productLabel: string; // "BEV-1001 제주 삼다수 500ml"
+  supplierLabel: string; // "한빛유통 (입고예정 2026-08-21)"
+  quantity: number;
+  unit: string;
+  totalAmount: number;
+  stockBefore: number;
+  stockAfter: number;
+  /** 확정/취소/만료 후 카드가 비활성 상태로 남는다 */
   resolved?: "confirmed" | "canceled" | "expired";
 };
 
@@ -111,7 +114,7 @@ export function buildThreads(records: ChatRecord[]): Thread[] {
             sql: r.meta.sql,
           }
         : undefined,
-      // PENDING 이체 카드는 복원하지 않는다 — 유효시간 5분이라 이력 시점에는 만료됐다.
+      // PENDING 발주 카드는 복원하지 않는다 — 유효시간 5분이라 이력 시점에는 만료됐다.
     });
     thread.updatedAt = Math.max(thread.updatedAt, at);
   }
